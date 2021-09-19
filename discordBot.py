@@ -8,12 +8,9 @@ WIDZISZMNIE_EMOTE = os.getenv("WIDZISZMNIE_EMOTE")
 APP_ID = os.getenv("APP_ID")
 client = discord.Client()
 
-print(APP_ID)
-print(type(APP_ID))
-
 @client.event
 async def on_message(message):
-    if message.channel.id == BOTCHANNEL_ID:
+    if message.channel.id == int(BOTCHANNEL_ID):
         print(re.sub(r'#[0-9]+','',str(message.author)) + " wrote: " + message.content)
     if message.content.find("!brek") != -1:
         await message.channel.send("Widzisz mnie?! 👀")
