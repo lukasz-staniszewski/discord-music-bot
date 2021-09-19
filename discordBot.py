@@ -1,23 +1,13 @@
-
 import discord
-import re
 import os
+from discord.ext import commands
+from musicBot import MusicCog
+from messageBot import MessageCog
 
-BOTCHANNEL_ID = os.getenv("BOTCHANNEL_ID")
-WIDZISZMNIE_EMOTE = os.getenv("WIDZISZMNIE_EMOTE")
 APP_ID = os.getenv("APP_ID")
-client = discord.Client()
 
-@client.event
-async def on_message(message):
-    if message.channel.id == int(BOTCHANNEL_ID):
-        print(re.sub(r'#[0-9]+','',str(message.author)) + " wrote: " + message.content)
-    if message.content.find("!brek") != -1:
-        await message.channel.send("Widzisz mnie?! 👀")
-    if message.content.find("!gif") != -1:
-        await message.channel.send(r"https://tenor.com/view/starege-dobrze-dobrzebrek-ca%C5%82y%C5%82eb-%C5%82eb-gif-22915280")
-    if message.content.find(WIDZISZMNIE_EMOTE) != -1 and str(message.author) != "DJ WidziszMnie#0843":
-        await message.add_reaction(WIDZISZMNIE_EMOTE)
+bot = commands.Bot(command_prefix="!")
+bot.add_cog(MusicCog(bot))
+bot.add_cog(MessageCog(bot))
 
-
-client.run(APP_ID)
+bot.run(APP_ID)
