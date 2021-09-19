@@ -121,4 +121,3 @@ class MusicCog(commands.Cog):
         if self.voice_channel != "" and self.voice_channel:
             self.voice_channel.stop()
             await self.play_music()
-
