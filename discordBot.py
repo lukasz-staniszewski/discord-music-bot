@@ -8,6 +8,8 @@ WIDZISZMNIE_EMOTE = os.getenv("WIDZISZMNIE_EMOTE")
 APP_ID = os.getenv("APP_ID")
 client = discord.Client()
 
+print(APP_ID)
+print(type(APP_ID))
 
 @client.event
 async def on_message(message):
