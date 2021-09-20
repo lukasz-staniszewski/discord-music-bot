@@ -2,14 +2,23 @@ import discord
 import os
 from discord.ext import commands
 from youtube_dl import YoutubeDL
+import asyncio
+
+
+class EmptyPlaylistException(Exception):
+    pass
+
+
+class PlaylistBoundsException(Exception):
+    pass
 
 
 class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
         self.is_playing = False
         self.playlist = []
+        self.mutex_playlist = asyncio.Lock()
         self.YTDL_OPTIONS = {
             "format": "bestaudio",
             "noplaylist": True,
@@ -20,6 +29,7 @@ class MusicCog(commands.Cog):
         }
 
         self.voice_channel = ""
+        self.current_song = ""
 
     def search_youtube(self, item):
         with YoutubeDL(self.YTDL_OPTIONS) as ydl:
@@ -36,23 +46,31 @@ class MusicCog(commands.Cog):
             "duration": info["duration"],
         }
 
-    def play_next(self):
+    async def play_next(self):
         if len(self.playlist) > 0:
             self.is_playing = True
             m_url = self.playlist[0][0]["source"]
-            self.playlist.pop(0)
-            self.voice_channel.play(
-                discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS),
-                after=lambda f: self.play_next(),
-            )
+            self.current_song = self.playlist.pop(0)
+            try:
+                self.voice_channel.play(
+                    discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS),
+                    after=lambda f: self.play_next(),
+                )
+            except discord.errors.ClientException as e:
+                if str(e) == "Already playing audio.":
+                    print("~ERROR~ | Weirdo exception :~")
         else:
             self.is_playing = False
+            self.current_song = False
 
     async def play_music(self):
         if len(self.playlist) > 0:
             self.is_playing = True
-            m_url = self.playlist[0][0]["source"]
-
+            await self.mutex_playlist.acquire()
+            try:
+                m_url = self.playlist[0][0]["source"]
+            finally:
+                self.mutex_playlist.release()
             if (
                 self.voice_channel == ""
                 or not self.voice_channel.is_connected()
@@ -62,19 +80,22 @@ class MusicCog(commands.Cog):
             else:
                 await self.voice_channel.move_to(self.playlist[0][1])
 
-            print(self.playlist)
-            self.playlist.pop(0)
+            await self.mutex_playlist.acquire()
+            try:
+                self.current_song = self.playlist.pop(0)
+            finally:
+                self.mutex_playlist.release()
             self.voice_channel.play(
                 discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS),
                 after=lambda f: self.play_next(),
             )
         else:
             self.is_playing = False
+            self.current_song = ""
 
-    @commands.command()
-    async def p(self, ctx, *args):
+    @commands.command(aliases=["p", "play", "P"])
+    async def _play(self, ctx, *args):
         query = " ".join(args)
-
         if ctx.author.voice is None or ctx.author.voice.channel is None:
             await ctx.send("You need to be in any voice channel to invite me! 🤬")
             await ctx.send("https://j.gifs.com/qxjV50.gif")
@@ -85,18 +106,41 @@ class MusicCog(commands.Cog):
                 await ctx.send("Try other video, this one cant be played! 🤐")
                 await ctx.send("https://c.tenor.com/ACD_2wFkA4QAAAAC/tssk-no.gif")
             else:
-                await ctx.send(
-                    "Song {} added to the queue, its current position: {}".format(
-                        song["title"], str(len(self.playlist) + 1)
+                concat_str = query.upper() + song["title"].upper()
+                gifx = False
+                if concat_str.find("XAYOO") != -1:
+                    gifx = True
+                gifb = False
+                if (
+                    concat_str.find("BOXDEL") != -1
+                    or concat_str.find("MASN") != -1
+                    or concat_str.find("AFERKI") != -1
+                    or concat_str.find("MGNG") != -1
+                ):
+                    gifb = True
+                await self.mutex_playlist.acquire()
+                try:
+                    await ctx.send(
+                        "Song {} added to the queue, its current position: {}".format(
+                            song["title"], str(len(self.playlist) + 1)
+                        )
                     )
-                )
-                self.playlist.append([song, voice_channel])
-
+                    if gifx:
+                        await ctx.send(
+                            "https://tenor.com/view/xayoo-twitch-idol-gif-22718834"
+                        )
+                    if gifb:
+                        await ctx.send(
+                            "https://tenor.com/view/boxdel-kwatera-pszczulka-kofelina-jasper-gif-22735704"
+                        )
+                    self.playlist.append([song, voice_channel])
+                finally:
+                    self.mutex_playlist.release()
                 if self.is_playing is False:
                     await self.play_music()
 
-    @commands.command()
-    async def q(self, ctx):
+    @commands.command(aliases=["queue", "q", "playlist"])
+    async def _queue(self, ctx):
         retval = ""
         for i in range(0, len(self.playlist)):
             retval += (
@@ -110,14 +154,72 @@ class MusicCog(commands.Cog):
                 + "\n"
             )
 
-        print(retval)
         if retval != "":
-            await ctx.send(retval)
+            await ctx.send("```\n" + retval + "```")
         else:
             await ctx.send("No music in queue! 🛑")
 
-    @commands.command()
-    async def skip(self, ctx):
+    @commands.command(aliases=["current", "current_song"])
+    async def _current(self, ctx):
+        if self.current_song != "":
+            await ctx.send(
+                "```\nCurrent song's name is: {}\n```".format(
+                    self.current_song[0]["title"]
+                )
+            )
+        else:
+            await ctx.send("There is no current song! 🛑")
+
+    @commands.command(aliases=["skip", "s"])
+    async def _skip(self, ctx=None):
         if self.voice_channel != "" and self.voice_channel:
             self.voice_channel.stop()
             await self.play_music()
+
+    @commands.command(aliases=["clear", "c"])
+    async def _clear(self, ctx=None):
+        if self.voice_channel != "" and self.voice_channel:
+            await self.mutex_playlist.acquire()
+            try:
+                self.voice_channel.stop()
+                self.playlist = []
+                self.is_playing = False
+                self.current_song = ""
+            finally:
+                self.mutex_playlist.release()
+
+    @commands.command(aliases=["remove", "r"])
+    async def _remove(self, ctx, *args):
+        query = " ".join(args)
+        try:
+            if len(self.playlist) == 0:
+                raise EmptyPlaylistException
+            int_arg = int(query)
+            if int_arg < 1 or int_arg > len(self.playlist):
+                raise PlaylistBoundsException(f"{int_arg}")
+            await self.mutex_playlist.acquire()
+            try:
+                self.playlist.pop(int_arg - 1)
+            finally:
+                self.mutex_playlist.release()
+
+        except (EmptyPlaylistException):
+            await ctx.send("🛑 You can't remove from empty playlist! 🛑")
+        except (ValueError):
+            await ctx.send(
+                "🛑 Hold on! You passed incorrect argument! 🛑\nExample use:\n```\n!remove 2\n```"
+            )
+        except (PlaylistBoundsException) as e:
+            await ctx.send(
+                f"🛑 There is no {e}. place on the playlist! Try numbers from 1 to {len(self.playlist)} 🛑"
+            )
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if (
+            before.channel is not None
+            and after.channel is None
+            and str(member) == "DJ WidziszMnie#0843"
+        ):
+            print("~BOT_INFO~ | Bot disconnected!")
+            await self._clear()
