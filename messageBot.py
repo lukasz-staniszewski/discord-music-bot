@@ -8,7 +8,6 @@ class MessageCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.BOTCHANNEL_ID = os.getenv("BOTCHANNEL_ID")
-        self.WIDZISZMNIE_EMOTE = os.getenv("WIDZISZMNIE_EMOTE")
 
     @commands.command()
     async def brek(self, ctx):
@@ -28,8 +27,6 @@ class MessageCog(commands.Cog):
                 + " wrote: "
                 + message.content
             )
-        if (
-            message.content.find(self.WIDZISZMNIE_EMOTE) != -1
-            and str(message.author) != "DJ WidziszMnie#0843"
-        ):
-            await message.add_reaction(self.WIDZISZMNIE_EMOTE)
+        possible_emote = re.findall(r"<:widziszmnie:[0-9]*>", message.content)
+        if len(possible_emote) != 0:
+            await message.add_reaction(possible_emote[0])

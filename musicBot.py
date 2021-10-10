@@ -173,7 +173,7 @@ class MusicCog(commands.Cog):
     @commands.command(aliases=["skip", "s"])
     async def _skip(self, ctx=None):
         if self.voice_channel != "" and self.voice_channel:
-            self.voice_channel.stop()
+            self.voice_channel.pause()
             await self.play_music()
 
     @commands.command(aliases=["clear", "c"])
