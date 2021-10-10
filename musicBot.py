@@ -46,7 +46,7 @@ class MusicCog(commands.Cog):
             "duration": info["duration"],
         }
 
-    async def play_next(self):
+    def play_next(self):
         if len(self.playlist) > 0:
             self.is_playing = True
             m_url = self.playlist[0][0]["source"]
@@ -61,7 +61,7 @@ class MusicCog(commands.Cog):
                     print("~ERROR~ | Weirdo exception :~")
         else:
             self.is_playing = False
-            self.current_song = False
+            self.current_song = ""
 
     async def play_music(self):
         if len(self.playlist) > 0:
