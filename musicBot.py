@@ -3,6 +3,7 @@ import os
 from discord.ext import commands
 from youtube_dl import YoutubeDL
 import asyncio
+from discord.utils import get
 
 
 class EmptyPlaylistException(Exception):
@@ -16,9 +17,12 @@ class PlaylistBoundsException(Exception):
 class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.is_playing = False
-        self.playlist = []
-        self.mutex_playlist = asyncio.Lock()
+        # self.is_playing_on_server = False
+        self.is_playing_on_server = {}
+        # self.playlist = []
+        self.server_playlist = {}
+        # self.mutex_playlist = asyncio.Lock()
+        self.server_mutex_playlist = {}
         self.YTDL_OPTIONS = {
             "format": "bestaudio",
             "noplaylist": True,
@@ -28,8 +32,17 @@ class MusicCog(commands.Cog):
             "options": "-vn",
         }
 
-        self.voice_channel = ""
-        self.current_song = ""
+        # self.voice_channel = ""
+        self.server_voice_channel = {}
+        self.server_current_song = {}
+
+    def connect_channel(self, ctx):
+        self.is_playing_on_server[ctx.guild.id] = False
+        self.server_playlist[ctx.guild.id] = []
+        self.server_mutex_playlist[ctx.guild.id] = asyncio.Lock()
+        self.server_voice_channel[ctx.guild.id] = ctx.author.voice.channel
+        print(f"AFTER CONNECTION:\n{self.server_voice_channel[ctx.guild.id]=}\n")
+        self.server_current_song[ctx.guild.id] = ""
 
     def search_youtube(self, item):
         with YoutubeDL(self.YTDL_OPTIONS) as ydl:
@@ -46,52 +59,56 @@ class MusicCog(commands.Cog):
             "duration": info["duration"],
         }
 
-    def play_next(self):
-        if len(self.playlist) > 0:
-            self.is_playing = True
-            m_url = self.playlist[0][0]["source"]
-            self.current_song = self.playlist.pop(0)
+    def play_next(self, ctx):
+        if len(self.server_playlist[ctx.guild.id]) > 0:
+            self.is_playing_on_server[ctx.guild.id] = True
+            m_url = self.server_playlist[ctx.guild.id][0][0]["source"]
+            self.server_current_song[ctx.guild.id] = self.server_playlist[
+                ctx.guild.id
+            ].pop(0)
             try:
-                self.voice_channel.play(
+                self.server_voice_channel[ctx.guild.id].play(
                     discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS),
-                    after=lambda f: self.play_next(),
+                    after=lambda f: self.play_next(ctx),
                 )
             except discord.errors.ClientException as e:
                 if str(e) == "Already playing audio.":
                     print("~ERROR~ | Weirdo exception :~")
         else:
-            self.is_playing = False
-            self.current_song = ""
+            self.is_playing_on_server[ctx.guild.id] = False
+            self.server_current_song[ctx.guild.id] = ""
 
-    async def play_music(self):
-        if len(self.playlist) > 0:
-            self.is_playing = True
-            await self.mutex_playlist.acquire()
+    async def play_music(self, ctx):
+        if len(self.server_playlist[ctx.guild.id]) > 0:
+            self.is_playing_on_server[ctx.guild.id] = True
+            await self.server_mutex_playlist[ctx.guild.id].acquire()
             try:
-                m_url = self.playlist[0][0]["source"]
+                m_url = self.server_playlist[ctx.guild.id][0][0]["source"]
             finally:
-                self.mutex_playlist.release()
-            if (
-                self.voice_channel == ""
-                or not self.voice_channel.is_connected()
-                or self.voice_channel == None
-            ):
-                self.voice_channel = await self.playlist[0][1].connect()
-            else:
-                await self.voice_channel.move_to(self.playlist[0][1])
+                self.server_mutex_playlist[ctx.guild.id].release()
+            try:
+                self.server_voice_channel[ctx.guild.id] = await self.server_playlist[
+                    ctx.guild.id
+                ][0][1].connect()
+            except discord.errors.ClientException:
+                self.server_voice_channel[ctx.guild.id].move_to(
+                    self.server_playlist[ctx.guild.id][0][1]
+                )
 
-            await self.mutex_playlist.acquire()
+            await self.server_mutex_playlist[ctx.guild.id].acquire()
             try:
-                self.current_song = self.playlist.pop(0)
+                self.server_current_song[ctx.guild.id] = self.server_playlist[
+                    ctx.guild.id
+                ].pop(0)
             finally:
-                self.mutex_playlist.release()
-            self.voice_channel.play(
+                self.server_mutex_playlist[ctx.guild.id].release()
+            self.server_voice_channel[ctx.guild.id].play(
                 discord.FFmpegPCMAudio(m_url, **self.FFMPEG_OPTIONS),
-                after=lambda f: self.play_next(),
+                after=lambda f: self.play_next(ctx),
             )
         else:
-            self.is_playing = False
-            self.current_song = ""
+            self.is_playing_on_server[ctx.guild.id] = False
+            self.server_current_song[ctx.guild.id] = ""
 
     @commands.command(aliases=["p", "play", "P"])
     async def _play(self, ctx, *args):
@@ -100,6 +117,8 @@ class MusicCog(commands.Cog):
             await ctx.send("You need to be in any voice channel to invite me! 🤬")
             await ctx.send("https://j.gifs.com/qxjV50.gif")
         else:
+            if ctx.guild.id not in self.is_playing_on_server.keys():
+                self.connect_channel(ctx)
             voice_channel = ctx.author.voice.channel
             song = self.search_youtube(query)
             if type(song) == bool:
@@ -118,11 +137,12 @@ class MusicCog(commands.Cog):
                     or concat_str.find("MGNG") != -1
                 ):
                     gifb = True
-                await self.mutex_playlist.acquire()
+                await self.server_mutex_playlist[ctx.guild.id].acquire()
                 try:
                     await ctx.send(
                         "Song {} added to the queue, its current position: {}".format(
-                            song["title"], str(len(self.playlist) + 1)
+                            song["title"],
+                            str(len(self.server_playlist[ctx.guild.id]) + 1),
                         )
                     )
                     if gifx:
@@ -133,24 +153,24 @@ class MusicCog(commands.Cog):
                         await ctx.send(
                             "https://tenor.com/view/boxdel-kwatera-pszczulka-kofelina-jasper-gif-22735704"
                         )
-                    self.playlist.append([song, voice_channel])
+                    self.server_playlist[ctx.guild.id].append([song, voice_channel])
                 finally:
-                    self.mutex_playlist.release()
-                if self.is_playing is False:
-                    await self.play_music()
+                    self.server_mutex_playlist[ctx.guild.id].release()
+                if self.is_playing_on_server[ctx.guild.id] is False:
+                    await self.play_music(ctx)
 
     @commands.command(aliases=["queue", "q", "playlist"])
     async def _queue(self, ctx):
         retval = ""
-        for i in range(0, len(self.playlist)):
+        for i in range(0, len(self.server_playlist[ctx.guild.id])):
             retval += (
                 str(i + 1)
                 + "-> "
-                + self.playlist[i][0]["title"]
+                + self.server_playlist[ctx.guild.id][i][0]["title"]
                 + " | "
-                + f"{(self.playlist[i][0]['duration'] // 60)}"
+                + f"{(self.server_playlist[ctx.guild.id][i][0]['duration'] // 60)}"
                 + ":"
-                + f"{(self.playlist[i][0]['duration'] % 60):02}"
+                + f"{(self.server_playlist[ctx.guild.id][i][0]['duration'] % 60):02}"
                 + "\n"
             )
 
@@ -161,10 +181,10 @@ class MusicCog(commands.Cog):
 
     @commands.command(aliases=["current", "current_song"])
     async def _current(self, ctx):
-        if self.current_song != "":
+        if self.server_current_song[ctx.guild.id] != "":
             await ctx.send(
                 "```\nCurrent song's name is: {}\n```".format(
-                    self.current_song[0]["title"]
+                    self.server_current_song[ctx.guild.id][0]["title"]
                 )
             )
         else:
@@ -172,36 +192,42 @@ class MusicCog(commands.Cog):
 
     @commands.command(aliases=["skip", "s"])
     async def _skip(self, ctx=None):
-        if self.voice_channel != "" and self.voice_channel:
-            self.voice_channel.pause()
-            await self.play_music()
+        if (
+            self.server_voice_channel[ctx.guild.id] != ""
+            and self.server_voice_channel[ctx.guild.id]
+        ):
+            self.server_voice_channel[ctx.guild.id].pause()
+            await self.play_music(ctx)
 
     @commands.command(aliases=["clear", "c"])
-    async def _clear(self, ctx=None):
-        if self.voice_channel != "" and self.voice_channel:
-            await self.mutex_playlist.acquire()
+    async def _clear(self, ctx):
+        if (
+            self.server_voice_channel[ctx.guild.id] != ""
+            and self.server_voice_channel[ctx.guild.id]
+        ):
+            await self.server_mutex_playlist[ctx.guild.id].acquire()
             try:
-                self.voice_channel.stop()
-                self.playlist = []
-                self.is_playing = False
-                self.current_song = ""
+                self.server_voice_channel[ctx.guild.id].stop()
+                self.server_playlist[ctx.guild.id] = []
+                self.is_playing_on_server[ctx.guild.id] = False
+                self.server_current_song[ctx.guild.id] = ""
             finally:
-                self.mutex_playlist.release()
+                self.server_mutex_playlist[ctx.guild.id].release()
 
     @commands.command(aliases=["remove", "r"])
     async def _remove(self, ctx, *args):
         query = " ".join(args)
         try:
-            if len(self.playlist) == 0:
+            if len(self.server_playlist[ctx.guild.id]) == 0:
                 raise EmptyPlaylistException
             int_arg = int(query)
-            if int_arg < 1 or int_arg > len(self.playlist):
+            if int_arg < 1 or int_arg > len(self.server_playlist[ctx.guild.id]):
                 raise PlaylistBoundsException(f"{int_arg}")
-            await self.mutex_playlist.acquire()
+            await self.server_mutex_playlist[ctx.guild.id].acquire()
             try:
-                self.playlist.pop(int_arg - 1)
+                self.server_playlist[ctx.guild.id].pop(int_arg - 1)
             finally:
-                self.mutex_playlist.release()
+                self.server_mutex_playlist[ctx.guild.id].release()
 
         except (EmptyPlaylistException):
             await ctx.send("🛑 You can't remove from empty playlist! 🛑")
@@ -222,4 +248,4 @@ class MusicCog(commands.Cog):
             and str(member) == "DJ WidziszMnie#0843"
         ):
             print("~BOT_INFO~ | Bot disconnected!")
-            await self._clear()
+            await self._clear(member)
