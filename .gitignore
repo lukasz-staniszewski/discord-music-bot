@@ -1,4 +1,4 @@
 .pytest_cache
 /venv
 *.ps1
-__pycache__
+*pycache*
