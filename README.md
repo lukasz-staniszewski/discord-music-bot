@@ -23,27 +23,32 @@ https://discord.com/oauth2/authorize?client_id=889117583935148102&scope=bot&perm
 
 ## Instalation
 
-1. Download this repository. / Pobierz repozytorium.
-2. Create your own Python virtual environment. / Stwórz swoje własne środowisko wirtualne Python.
+1. Download this repository.
+2. Create your own Python virtual environment.
 
 ``` 
 python -m venv venv
 ```
-
-3. Activate venv. / Aktywuj środowisko.
+3. Create powershell script with content:
+```
+$env:APP_ID = "[YOUR_BOT_ID_FROM_DISCORD_DEVELOPER_FORMAT"
+$env:BOTCHANNEL_ID = [DEBUG_CHANNEL_ID]
+```
+3. Activate venv and powershell script in console.
 
 ``` 
-REPO_PATH\venv\scripts\activate 
+REPO_PATH\venv\scripts\activate
+REPO_PARH\script_name.ps1
 ```
 
-4. Install necessary packages. / Zainstaluj odpowiednie biblioteki.
+4. Install necessary packages. 
 
 ``` 
 pip install -r requirements.txt 
 ```
 
-5. Run Jupyter Notebook. / Uruchom Jupyter Notebook.
+5. Run bot.
 
 ``` 
-jupyter notebook 
+python discordBot.py 
 ```
