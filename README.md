@@ -11,10 +11,41 @@
 </div>
 
 ## Bot invitation to your own discord server:
-1. Only you have to visit the site:
+1. Only what you have to do is to visit below url address and invite bot to your own channel:
 ```
 https://discord.com/oauth2/authorize?client_id=889117583935148102&scope=bot&permissions=0
 ```
+2. Helpful commands:
+```
+!play SONG_YT_URL/SEARCHING_PHRASE
+    \(ﾟｰﾟ) bot joins voice channel and start playing or adds 
+          song to playlist
+
+!clear
+    \(ﾟｰﾟ) bot clears whole server's playlist and stop playing
+
+!current
+    \(ﾟｰﾟ) bot shows you name of currently played song
+
+!queue
+    \(ﾟｰﾟ) bot shows you server's playlist
+
+!skip
+    \(ﾟｰﾟ) bot skips current song
+
+!remove SONG_INDEX
+    \(ﾟｰﾟ) bot removes song with given index from playlist
+
+!brek
+    \(ﾟｰﾟ) bot sends funny message
+
+!gif
+    \(ﾟｰﾟ) bot sends funny gif
+
+!help
+    \(ﾟｰﾟ) bot sends this message
+```
+
 
 ## Used technologies:
 1. Python 3.9.5
@@ -31,7 +62,7 @@ python -m venv venv
 ```
 3. Create powershell script with content:
 ```
-$env:APP_ID = "[YOUR_BOT_ID_FROM_DISCORD_DEVELOPER_FORMAT"
+$env:APP_ID = "[YOUR_BOT_ID_FROM_DISCORD_DEVELOPER_PORTAL]"
 $env:BOTCHANNEL_ID = [DEBUG_CHANNEL_ID]
 ```
 3. Activate venv and powershell script in console.
