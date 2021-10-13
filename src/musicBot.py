@@ -7,6 +7,8 @@ from discord.utils import get
 from discord.ext.commands.bot import Bot
 from discord.member import VoiceState
 from discord.ext.commands.context import Context
+from src.CurrentSong import CurrentSong
+from src.constants import HELP_MESSAGE
 
 
 class EmptyPlaylistException(Exception):
@@ -33,6 +35,7 @@ class MusicCog(commands.Cog):
             "options": "-vn",
         }
         self.bot = bot
+        self.help_message = HELP_MESSAGE
         self.is_playing_on_server = {}
         self.server_playlist = {}
         self.server_mutex_playlist = {}
@@ -49,7 +52,7 @@ class MusicCog(commands.Cog):
         self.server_playlist[ctx.guild.id] = []
         self.server_mutex_playlist[ctx.guild.id] = asyncio.Lock()
         self.server_voice_channel[ctx.guild.id] = ctx.author.voice.channel
-        self.server_current_song[ctx.guild.id] = ""
+        self.server_current_song[ctx.guild.id] = CurrentSong("", "")
 
     def search_youtube(self, item: str) -> any:
         """Function search for given song in YouTube.
@@ -72,6 +75,7 @@ class MusicCog(commands.Cog):
             "source": info["formats"][0]["url"],
             "title": info["title"],
             "duration": info["duration"],
+            "yt_url": info["webpage_url"],
         }
 
     async def send_message(self, message_str: str, ctx: Context):
@@ -136,9 +140,10 @@ class MusicCog(commands.Cog):
         if len(self.server_playlist[ctx.guild.id]) > 0:
             self.is_playing_on_server[ctx.guild.id] = True
             song_url = self.server_playlist[ctx.guild.id][0][0]["source"]
-            self.server_current_song[ctx.guild.id] = self.server_playlist[
-                ctx.guild.id
-            ].pop(0)
+            popped_song = self.server_playlist[ctx.guild.id].pop(0)
+            self.server_current_song[ctx.guild.id].song_url = popped_song[0]["yt_url"]
+            self.server_current_song[ctx.guild.id].song_name = popped_song[0]["title"]
+
             try:
                 self.server_voice_channel[ctx.guild.id].play(
                     discord.FFmpegPCMAudio(song_url, **self.FFMPEG_OPTIONS),
@@ -149,7 +154,7 @@ class MusicCog(commands.Cog):
                     print("~BOT ERROR~ | ~Already playing audio exception!~")
         else:
             self.is_playing_on_server[ctx.guild.id] = False
-            self.server_current_song[ctx.guild.id] = ""
+            self.server_current_song[ctx.guild.id].clear_info()
 
     async def reconnect(self, ctx: Context):
         """Provides reconnecting to channel after network error.
@@ -191,9 +196,13 @@ class MusicCog(commands.Cog):
 
             await self.server_mutex_playlist[ctx.guild.id].acquire()
             try:
-                self.server_current_song[ctx.guild.id] = self.server_playlist[
-                    ctx.guild.id
-                ].pop(0)
+                popped_song = self.server_playlist[ctx.guild.id].pop(0)
+                self.server_current_song[ctx.guild.id].song_url = popped_song[0][
+                    "yt_url"
+                ]
+                self.server_current_song[ctx.guild.id].song_name = popped_song[0][
+                    "title"
+                ]
             finally:
                 self.server_mutex_playlist[ctx.guild.id].release()
             try:
@@ -205,7 +214,7 @@ class MusicCog(commands.Cog):
                 self.reconnect(ctx)
         else:
             self.is_playing_on_server[ctx.guild.id] = False
-            self.server_current_song[ctx.guild.id] = ""
+            self.server_current_song[ctx.guild.id].clear_info()
 
     @commands.command(aliases=["p", "play", "P"])
     async def _play(self, ctx: Context, *args):
@@ -279,10 +288,11 @@ class MusicCog(commands.Cog):
         Args:
             ctx (Context): Context of executed discord command.
         """
-        if self.server_current_song[ctx.guild.id] != "":
+        if not self.server_current_song[ctx.guild.id].is_empty():
             await self.send_message(
-                "Current song's name is: {}".format(
-                    self.server_current_song[ctx.guild.id][0]["title"]
+                "Current song's name is: {} | [{}]".format(
+                    self.server_current_song[ctx.guild.id].song_name,
+                    self.server_current_song[ctx.guild.id].song_url,
                 ),
                 ctx,
             )
@@ -313,7 +323,7 @@ class MusicCog(commands.Cog):
                 self.server_voice_channel[ctx.guild.id].stop()
                 self.server_playlist[ctx.guild.id] = []
                 self.is_playing_on_server[ctx.guild.id] = False
-                self.server_current_song[ctx.guild.id] = ""
+                self.server_current_song[ctx.guild.id].clear_info()
             finally:
                 self.server_mutex_playlist[ctx.guild.id].release()
 
@@ -349,6 +359,15 @@ class MusicCog(commands.Cog):
                 f"🛑 There is no {e}. place on the playlist! Try numbers from 1 to {len(self.server_playlist[ctx.guild.id])} 🛑",
                 ctx,
             )
+
+    @commands.command(aliases=["help", "h"])
+    async def _help(self, ctx: Context):
+        """Shows help message.
+
+        Args:
+            ctx (Context): Context of executed discord command.
+        """
+        await self.send_message(self.help_message, ctx)
 
     @commands.Cog.listener()
     async def on_voice_state_update(

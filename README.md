@@ -41,6 +41,9 @@ https://discord.com/oauth2/authorize?client_id=889117583935148102&scope=bot&perm
 
 !gif
     \(ﾟｰﾟ) bot sends funny gif
+
+!help
+    \(ﾟｰﾟ) bot sends this message
 ```
 
 
