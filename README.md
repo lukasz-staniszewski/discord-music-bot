@@ -62,7 +62,7 @@ python -m venv venv
 ```
 3. Create powershell script with content:
 ```
-$env:APP_ID = "[YOUR_BOT_ID_FROM_DISCORD_DEVELOPER_FORMAT"
+$env:APP_ID = "[YOUR_BOT_ID_FROM_DISCORD_DEVELOPER_PORTAL]"
 $env:BOTCHANNEL_ID = [DEBUG_CHANNEL_ID]
 ```
 3. Activate venv and powershell script in console.
